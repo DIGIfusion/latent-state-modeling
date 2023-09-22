@@ -1,0 +1,10 @@
+export PYTHONPATH=/home/kitadam/ENR_Sven/latent-state-modeling
+RAW_AUG_DIR=/home/kitadam/ENR_Sven/global_data/RAW_AUG_PULSES
+RAW_JET_DIR=/home/kitadam/ENR_Sven/global_data/RAW_JET_PULSES
+JET_PDB=/home/kitadam/ENR_Sven/global_data/jet-all-full.csv
+ARRAY_FOLDER=/home/kitadam/ENR_Sven/latent-state-modeling/local_data_test_multi_machine
+
+python3 data/build_arrays_multi_machine.py -jetpdb_filename=$JET_PDB -rf_aug=$RAW_AUG_DIR -rf_jet=$RAW_JET_DIR -lf=$ARRAY_FOLDER  -mp --additional_feature_engineering=P_TOT/P_LH --additional_feature_engineering=P_TOT --additional_feature_engineering=aspect_ratio -ff=b_hmod -ff=impspez -ff=b_disr -ff=b_dise -ff=b_disb
+python3 data/collect_transformations.py -af=$ARRAY_FOLDER 
+
+# -mf=example_mapping  -feature=ped_col -feature=ped_rhos -feature=ped_beta

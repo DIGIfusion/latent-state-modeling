@@ -1,0 +1,2 @@
+from .DIVA_trainer import DIVATrainInterface
+from .DUAL_trainer import DualTrainInterface

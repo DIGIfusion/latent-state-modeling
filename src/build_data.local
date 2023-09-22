@@ -1,0 +1,7 @@
+export PYTHONPATH=/home/kitadam/ENR_Sven/latent-state-modeling
+RAW_AUG_DIR=/home/kitadam/ENR_Sven/global_data/RAW_AUG_PULSES
+ARRAY_FOLDER=/home/kitadam/ENR_Sven/latent-state-modeling/local_data_test
+
+python3 data/build_arrays.py -rf=$RAW_AUG_DIR -lf=$ARRAY_FOLDER --additional_feature_engineering=stability_jb --additional_feature_engineering=stability_alpha --additional_feature_engineering=stability_thetas --additional_feature_engineering=stability_norm --additional_feature_engineering=stability_ratio --additional_feature_engineering=stability_labels --additional_feature_engineering=impurity_gas -mp --additional_feature_engineering=P_TOT/P_LH --additional_feature_engineering=P_TOT --additional_feature_engineering=aspect_ratio -ff=b_hmod -ff=impspez -ff=b_disr -ff=b_dise -ff=b_disb
+python3 data/collect_transformations.py -af=$ARRAY_FOLDER 
+

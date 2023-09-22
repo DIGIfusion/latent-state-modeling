@@ -1,0 +1,73 @@
+{"use_mlflow": false, "experiment_name": "DIVA_1", "seed": 1,  
+    "data": {
+            "chunk_size": 10000, 
+            "data_path": "/home/kitadam/ENR_Sven/latent-state-modeling/local_data_test_multi_machine",
+            "transform_file": "transformations.pickle", 
+            "filter_mps": ["IpiFP", "D_tot", "k", "delRoben", "delRuntn", "ahor", "q95", "P_TOT", "aspect_ratio"], 
+            "filter_mps_conditional": ["Rgeo"], 
+            "split": 0.7, 
+            "clamp_observations_to_reals": true,
+            "return_type": "slice", 
+            "sample_interval": 20},
+    "model": {"object": "SSVAE",
+            "state_size_c": 5,
+            "state_size_not_c": 7,
+            "state_size_stochastic": 3,
+            "min_std_dev": 0.01,
+            "cond_prior_conditional_args":{
+                "object": "Prior", 
+                "activation_function": "ReLU", 
+                "hidden_sizes": [20 ,20]},
+            "cond_prior_args":{
+                "object": "Prior", 
+                "activation_function": "ReLU", 
+                "hidden_sizes": [20 ,20]},
+            "aux_reg_args":{
+                "object": "Regressor",                  
+                "activation_function": "ReLU", 
+                "hidden_sizes": [20]},
+            "aux_reg_conditional_args":{
+                "object": "DiagonalRegressor",                  
+                "activation_function": "ReLU", 
+                "hidden_sizes": [20]},
+            "encoder_args": {
+                "channel_dims":[4, 8], 
+                "kernel_sizes": 4, 
+                "stride_sizes": 2
+            },
+            "decoder_args": {
+                "embedding_size": 128,
+                "channel_dims":[8,4,2], 
+                "kernel_sizes": 5, 
+                "stride_sizes": 3
+            }
+            }, 
+    "trainer": {"object": "DIVATrainInterface",
+            "learning_rate": 0.02, 
+            "batch_size": 8, 
+            "lr_scheduler": null, 
+            "num_epochs": 250, 
+            "print_interval": 1, 
+            "max_test_batches": 5, 
+            "test_interval": 5, 
+            "nw": 4, 
+            "loss_fn": "mse_loss",
+            "loss_hyperparams": {
+                "beta_kld_prior_posterior": 1.0,
+                "beta_kl_prior_posterior_stoch": 1.0, 
+                "beta_kl_prior_posterior_non_conditional": 1.0,
+                "beta_kl_prior_posterior_conditional": 1.0,
+                "beta_observations": 1.0,
+                "beta_actions": 1.0, 
+                "beta_kld_condprior_posterior": 1.0, 
+                "beta_kl_condprior_posterior_conditional": 1.0, 
+                "beta_kl_condprior_posterior_non_conditional": 1.0, 
+                "beta_actions_cond": 1.0},
+            "physics": {
+                "pressure": true,
+                "beta_pressure": 10.0, 
+                "gradient": false,
+                "beta_gradient": 20.0
+                }
+            }
+        }

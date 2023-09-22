@@ -1,0 +1,67 @@
+{"use_mlflow": false, "experiment_name": "dual-simple-3", "seed": 1,  
+    "data": {"object": "PulseDataset",
+            "chunk_size": 10000, 
+            "data_path": "/home/kitadam/ENR_Sven/latent-state-modeling/local_data_stability",
+            "transform_file": "transformations.pickle", 
+            "filter_mps": ["IpiFP", "D_tot", "k", "delRoben", "delRuntn", "ahor", "q95", "P_TOT", "aspect_ratio"], 
+            "filter_mps_conditional": ["P_TOT"],
+            "split": 0.6, 
+            "return_type": "pulse", 
+            "clamp_observations_to_reals": true,
+            "sample_interval": 20},
+    "model": {"object": "DualModelInterface",
+                "min_std_dev": 0.01, 
+                "state_size": 8,
+                
+            "observational_model":{
+                                "object": "VAE_1D_AuxReg",
+                                "encoder_args": {
+                                        "channel_dims":[4, 8, 16, 32], 
+                                        "kernel_sizes": 4, 
+                                        "stride_sizes": 2
+                                },
+                                "decoder_args": {
+                                        "embedding_size": 128,
+                                        "channel_dims":[16,8,4,2], 
+                                        "kernel_sizes": [5,5,6,6], 
+                                        "stride_sizes": 3
+                                        }, 
+                                "aux_reg_args":{
+                                        "object": "DiagonalRegressor"
+                                        },
+                                "embedding_size": 128
+                                
+                                },
+            "transitional_model": {
+                                "object": "LinearForwardModel", 
+                                "hidden_layers": 20, 
+                                "pushforward_trick": "all"
+                                }
+            }, 
+    "trainer": {"object": "DualTrainInterface",
+                "learning_rate": 0.02, 
+                "batch_size": 8, 
+                "lr_scheduler": null, 
+                "num_epochs": 250, 
+                "print_interval": 1, 
+                "max_test_batches": 5, 
+                "test_interval": 5, 
+                "nw": 4, 
+                "num_rollout": 0,
+                "rollout_start": 4,
+                "rollout_step_interval": 3,
+                "rollout_increase_step_amount": 1,
+                "physics": {
+                        "pressure": false,
+                        "beta_pressure": 10.0, 
+                        "gradient": false,
+                        "beta_gradient": 20.0
+                        }, 
+                "loss_hyperparams": {
+                        "beta_kld_transition": 10.0,
+                        "beta_observations": 1.0,
+                        "beta_kld_posterior_normal": 0.01, 
+                        "beta_actions_cond": 1.0}
+                }
+                
+}

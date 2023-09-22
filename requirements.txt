@@ -1,0 +1,7 @@
+numpy
+torch 
+aug-sfutils
+pandas 
+scikit-learn
+scipy 
+ruptures
