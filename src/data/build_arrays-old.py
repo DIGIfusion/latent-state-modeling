@@ -5,10 +5,9 @@ from multiprocessing import Pool
 import psutil
 import numpy as np
 import _utils as datautils
-import yaml 
-import sys 
-# import warnings
-# warnings.filterwarnings("error")
+
+import warnings
+warnings.filterwarnings("error")
 
 negative_byte = b''
 
@@ -36,7 +35,6 @@ def save_arrays(save_dir: str, profiles: np.ndarray, mps: np.ndarray, radii: np.
     for data_name, data in zip(['PROFS', 'MP', 'RADII', 'TIME'], [profiles, mps, radii, times]): 
         save_array(relevant_path, data_name, data)
     print(f'{shotno} saved to {relevant_path}')
-
 def build(shot_num: str): 
     try: 
         profiles, mps, radii, times = make_arrays(shot_num)
@@ -51,39 +49,30 @@ def build(shot_num: str):
     else: 
         save_arrays(SAVE_DIR, profiles, mps, radii, times, shot_num)
 
-import yaml 
-def read_yaml_input_file(fname: str) -> dict: 
-    with open(fname, 'r') as f: 
-        return yaml.safe_load(f)
-        
+
 if __name__ == '__main__': 
     parser = argparse.ArgumentParser(description='Process raw data into numpy arrays')
     parser.add_argument('-rf', '--raw_folder_name', type=str, default=None)
     parser.add_argument('-lf', '--array_folder_name', type=str, required=True)
-    parser.add_argument('--config', type=str, required=True)
-    # parser.add_argument('-feature', '--additional_feature_engineering', action='append', type=str, default=[])
-    # parser.add_argument('-mf', '--additional_mapping_functions', action='append', default=[], type=str)
-    # parser.add_argument('-ff', '--additional_filtering_functions', action='append', default=[], type=str)
+    parser.add_argument('-feature', '--additional_feature_engineering', action='append', type=str, default=[])
+    parser.add_argument('-mf', '--additional_mapping_functions', action='append', default=[], type=str)
+    parser.add_argument('-ff', '--additional_filtering_functions', action='append', default=[], type=str)
     parser.add_argument('-mp', action='store_true', default=False, help='To do multiprocessing or not')
     args = parser.parse_args()
 
-    config = read_yaml_input_file(fname=args.config)
-    
-    
     relevant_mp_columns = ['BTF', 'IpiFP', 'D_tot', 'N_tot', 'P_OH', 'PNBI_TOT', 'PICR_TOT', 'PECR_TOT','SHINE_TH', 'k', 'delRoben', 'delRuntn', 'ahor', 'Rgeo', 'q95', 'Vol', 'Wmhd', 'Wfi', 'Wth', 'dWmhd/dt', 'tau_tot']
 
-    # additional_feature_engineering_cols: List[str] = config['additional_feature_engineering']
-    # mapping_functions = config['additional_mapping_functions']
-    
-    # additional_feature_filtering = config['feature_filtering']
+    additional_feature_engineering_cols: List[str] = args.additional_feature_engineering
+    mapping_functions = args.additional_mapping_functions
+    additional_feature_filtering = args.additional_filtering_functions
     SAVE_DIR = args.array_folder_name
+
     datautils.make_or_destroy_and_make_dir(SAVE_DIR)
-    # additional_feature_engineering_cols = datautils.parse_additional_feature_cols(config['additional_feature_engineering'])
-    datautils.write_list_to_file_as_string(filename=os.path.join(SAVE_DIR, 'mp_names_saved.txt'), liststrings=relevant_mp_columns+config['additional_feature_engineering'])
+    additional_feature_engineering_cols = datautils.parse_additional_feature_cols(additional_feature_engineering_cols)
+    datautils.write_list_to_file_as_string(filename=os.path.join(SAVE_DIR, 'mp_names_saved.txt'), liststrings=relevant_mp_columns+additional_feature_engineering_cols)
 
     shot_list = os.listdir(args.raw_folder_name)
-    print(len(shot_list))
-    sys.exit()
+    
     if args.mp: 
         with Pool(psutil.cpu_count(logical=False) -2) as pool: 
             pool.map(build, shot_list)

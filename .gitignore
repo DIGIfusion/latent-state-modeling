@@ -2,6 +2,7 @@
 local_data*/
 saved_models/
 mlruns/
+slurm_out/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

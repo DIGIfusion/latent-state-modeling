@@ -1,0 +1,24 @@
+#!/bin/bash
+#SBATCH --job-name=TEST_BUILD_ARRAYS
+#SBATCH --account=project_2005083
+#SBATCH --time=12:00:00
+#SBATCH --partition=medium
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=128
+#SBATCH --out=./slurm_out/array_building.out
+
+module purge 
+module load pytorch
+
+WRKDIR=/scratch/project_2005083/latent-state-modeling
+source $WRKDIR/.venv/bin/activate
+
+export PYTHONPATH=$WRKDIR/src
+
+RAW_AUG_DIR=/scratch/project_2005083/moxie/data/raw/RAW_AUG_PULSES
+ARRAY_FOLDER=$WRKDIR/local_data_test
+DATA_CONFIG=$WRKDIR/src/configs/DATA_CONFIG.yaml
+
+srun python3 data/build_arrays.py --raw_folder_name=$RAW_AUG_DIR --array_folder_name=$ARRAY_FOLDER --config=$DATA_CONFIG
+srun python3 data/collect_transformations.py -af=$ARRAY_FOLDER
