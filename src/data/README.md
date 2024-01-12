@@ -1,3 +1,9 @@
+# Data Config 
+
+Currently supported options: 
+
+
+```
 additional_feature_engineering: 
     - P_TOT/P_LH
     - P_TOT 
@@ -7,5 +13,7 @@ feature_filtering:
     - non-disruptive
     - only-hmode
     - no-impurities
-    - no-icrh
     - no-nbi
+    - no-ecrh
+    - no-icrh
+```

@@ -5,10 +5,11 @@ import numpy as np
 import pickle 
 from scipy.interpolate import interp1d
 import pandas as pd 
+from data_exceptions import NotDesiredShot, RawPulseDictErrorMissingInformation, ShortPulse
+
 negative_byte = b''
 
 def get_list_of_strings_from_file(filename: str) -> List[str]: 
-    # os.path.join(data_path, 'mp_names_saved.txt')
     with open(filename, 'r') as f:
         all_names_str = f.read()
     relevant_mp_columns = all_names_str.split(',')
@@ -22,13 +23,13 @@ def make_or_destroy_and_make_dir(dir: str) -> None:
         os.mkdir(dir)
     return None
 
-
 def write_list_to_file_as_string(filename: str, liststrings: List[str]) -> None: 
     line = ','.join(liststrings)
     with open(filename, 'w') as f: 
         f.write(f'{line}')
     
 def parse_additional_feature_cols(original_feature_cols: List[str]) -> List[str]:
+    """ Makes minor changes based on stability labels """
     parsed_feature_cols = original_feature_cols.copy()
     
     if 'stability_labels' in original_feature_cols: 
@@ -37,7 +38,7 @@ def parse_additional_feature_cols(original_feature_cols: List[str]) -> List[str]
             parsed_feature_cols.append(val)
     return parsed_feature_cols
 
-import aug_sfutils
+
 PULSE_DICT = NewType('AUG_DICT', Dict[str, Dict[str, Dict[str, np.ndarray]]]) 
 def get_local_pulse_dict(shot_number: Union[int, str], folder_name: str): 
     filename = os.path.join(folder_name, shot_number)
@@ -55,26 +56,8 @@ def get_local_pulse_arrays(shot_number: Union[int, str], folder_name: str) -> Tu
 
     return profiles, mps, time, radii
 
-class NotDesiredShot(Exception): 
-    def __init__(self, reason: str, shotno: str) -> None:
-        self.shotno = shotno
-        self.message = f'{shotno} not desired because {reason}'
-        super().__init__(reason, shotno)
 
-class RawPulseDictErrorMissingInformation(Exception): 
-    def __init__(self, reason: str, shotno: str) -> None: 
-        self.shotno = shotno
-        self.message = f'{shotno} not saved because {reason} did not exist'
-        super().__init__(reason, shotno)
-
-class ShortPulse(Exception): 
-    def __init__(self, shotno: str, total_time: float) -> None: 
-        self.shotno = shotno
-        self.message = f'{shotno} not saved because only {total_time}s after making array format'
-        super().__init__(total_time, shotno)
-
-
-def check_pulse_dict(pulse_dict: PULSE_DICT, shotno: str, device_name: str='AUG'):
+def filter_pulses_with_missing_data(pulse_dict: PULSE_DICT, shotno: str, device_name: str='AUG'):
     for key in pulse_dict.keys(): 
         if pulse_dict[key] is None: 
             if key == 'journal' and device_name == 'JET':
@@ -267,8 +250,88 @@ def precompute_combined_features(additional_feature_engineering_cols: List[str],
         computed_features = dict(**computed_features, stability_labels=stability_labels, stability_ratios=stability_ratios)
     return computed_features
 
-def pre_filter_aug_pulses_from_journal(pulse_dict: PULSE_DICT, shot_num: str) -> None: 
+def check_non_disruptive(pulse_dict):
+    """ Returns true if pulse is non disruptive """
+    return pulse_dict['journal']['b_disr'] == negative_byte
+
+def check_only_hmode(pulse_dict):
+    """ Returns True if pulse is h-mode """
+    return pulse_dict['journal']['b_hmod'] != negative_byte
+
+
+def check_no_impurities(pulse_dict):
+    """ Returns True if pulse does not have impurities as per journal """
+    """
+    'gas_ne': b'',
+     'gas_ar': b'',
+     'gas_n2': b'',
+     'gas_kr': b'',
+     'gas_xe': b'',
+     'gas_cd4': b'',
+     'gas_other': b''
+    """
+    # return (pulse_dict['journal']['imp'] == negative_byte & (not pulse_dict['machine_parameters']['N_tot'] > 0.1).any())
+    return (pulse_dict['journal']['gas_ne'] == negative_byte and pulse_dict['journal']['gas_ar'] == negative_byte and pulse_dict['journal']['gas_n2'] == negative_byte and pulse_dict['journal']['gas_kr'] == negative_byte and pulse_dict['journal']['gas_xe'] == negative_byte and pulse_dict['journal']['gas_cd4'] == negative_byte and  (pulse_dict['machine_parameters']['N_tot']['data'] < 0.001).all())
+    
+def check_no_nbi(pulse_dict): 
+    """ Returns true if pulse does not have NBI heating based on journal data""" 
+    """'nbi1l': 0.0,
+    'nbi1sp': 0.0,
+    'nbi1g': b'',
+    'nbi1b': 0.0,
+    'nbi1e': 0.0,
+    """
+    keys_g = [f'nbi{i}g' for i in range(1, 9)]
+    keys_other = [f'nbi{i}{c}' for i in range(1, 9) for c in ['sp', 'b', 'e', 'l']]
+    
+    return all(pulse_dict['journal'][key] == negative_byte for key in keys_g) and \
+           all(pulse_dict['journal'][key] == 0.0 for key in keys_other)
+
+def check_no_ecrh(pulse_dict): 
+    """ Returns true if pulse does not have ECRH heating based on journal data""" 
+    """
+    'ecrh1l': 292300.0,
+    'ecrh1f': 140000000000.0,
+    'ecrh1b': 3.5,
+    'ecrh1e': 4.279,
+    """
+    keys_other = [f'ecrh{i}{c}' for i in range(1, 9) for c in ['l', 'f', 'b', 'e']]
+    
+    return all(pulse_dict['journal'][key] == 0.0 for key in keys_other)
+
+def check_no_icrh(pulse_dict): 
+    """ Returns true if pulse does not have ECRH heating based on journal data""" 
+    """
+    'icrh1l': 292300.0,
+    'icrh1f': 140000000000.0,
+    'icrh1b': 3.5,
+    'icrh1e': 4.279,
+    """
+    keys_other = [f'icrh{i}{c}' for i in range(1, 5) for c in ['l', 'f', 'b', 'e']]
+    
+    return all(pulse_dict['journal'][key] == 0.0 for key in keys_other)
+
+
+filter_checks = {
+    'non-disruptive': check_non_disruptive,
+    'only-hmode': check_only_hmode,
+    'no-impurities': check_no_impurities, 
+    'no-nbi': check_no_nbi, 
+    'no-ecrh': check_no_ecrh, 
+    'no-icrh': check_no_icrh
+}
+
+
+def pre_filter_aug_pulses_from_journal(pulse_dict: PULSE_DICT, shot_num: str, filters: List[str]) -> None: 
+    for filter_name in filters:
+        check_function = filter_checks.get(filter_name)
+        if check_function is None: 
+            raise NotImplementedError(f'{filter_name}  not implemented yet')
+        if not check_function(pulse_dict):
+            raise NotDesiredShot(filter_name, shot_num)
+        
     # Grab only h-mode, deterium fuelled, non-disruptive plasmas
+    """
     filters = ['b_hmod', 'gas_d', 'b_disr'] # TODO: move outside to script
     for filter in filters:     
         if filter in ['b_hmod', 'gas_d']: 
@@ -277,7 +340,8 @@ def pre_filter_aug_pulses_from_journal(pulse_dict: PULSE_DICT, shot_num: str) ->
         elif filter in ['b_disr']: 
             if pulse_dict['journal'][filter] != negative_byte: 
                 raise NotDesiredShot(filter, shot_num)
-
+    """
+    return None 
 def pre_filter_pulses(pulse_dict: PULSE_DICT, shot_num: str, device_name: str, **kwargs) -> None: 
     if device_name == 'AUG': 
         pre_filter_aug_pulses_from_journal(pulse_dict, shot_num)
