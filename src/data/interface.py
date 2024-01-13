@@ -35,6 +35,7 @@ class DatasetInterface():
                 # 35537, 35538, 35539, (Disr, 35540, 35536)
                 queries = [35536, 35537,35538, 35539]
             train_idxs, val_idxs, test_idxs = [[shot_numbers.index(q) for q in queries] for i in [0, 1, 2]]
+            # TODO: Split based on program!! 
         else: 
             raise ValueError('Split variable not configured propoerly, should be float, str, or dict')
         return train_idxs, val_idxs, test_idxs

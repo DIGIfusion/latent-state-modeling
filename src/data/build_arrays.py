@@ -76,7 +76,7 @@ def map_pulse_dict_to_numpy_arrays(pulse_dict: datautils.PULSE_DICT, relevant_mp
             mp_raw_data, mp_raw_time = None, None
         else: 
             mp_raw_data, mp_raw_time = mp_data[key]['data'], mp_data[key]['time']
-        f = interp1d(mp_raw_time, mp_raw_data, bounds_error=False, fill_value=0.0)
+        f = interp1d(mp_raw_time, mp_raw_data, bounds_error=False, fill_value=(mp_raw_data[0], mp_raw_data[1]))
         relevant_mp_vals = f(relevant_time_windows)
         relevant_machine_parameters[:, mp_idx] = relevant_mp_vals
     return relevant_profiles, relevant_machine_parameters, relevant_radii, relevant_time_windows, relevant_mps_columns
@@ -101,8 +101,22 @@ def post_process_machine_parameters(mps: np.ndarray, config: dict) -> np.ndarray
 # ! Anomaly detection and updating!
 # !-------------------------------------------------
 
-def anomaly_detection_profiles(profiles: np.ndarray, config: dict) -> np.ndarray: 
+def anomaly_detection_profiles(profiles: np.ndarray, config: dict, shotno: str) -> np.ndarray: 
     # TODO: a lot
+    ne, te = profiles[:, 0]*1e-19, profiles[:, 1]*1e-3
+    # ! if there are more than 30 slices which have an change in profile average 
+    # ! of density/temperature that is > 3stds 
+    # ! of the average change of the averaged profile over whole pulse
+    # ! and the change in profile average is > 0.5 (normalized to keV and 1e-19)
+    # ! discard the pulse 
+    ne_bool = np.logical_and(np.gradient(ne.mean(axis=1)) > np.gradient(ne.mean(axis=1)).mean() + 3*np.gradient(ne.mean(axis=1)).std(), np.gradient(ne.mean(axis=1)) > 0.5)
+    # TODO: check against the gas injection! 
+    if ne_bool.sum() > 30: 
+        raise data_exceptions.ProfileAnomaly(reason=f'Density - {(ne_bool).sum()} slices with higher than 3 sigma deviation', shotno=shotno)
+    # TODO: check against the power injection! 
+    te_bool = np.logical_and(np.gradient(te.mean(axis=1)) > np.gradient(te.mean(axis=1)).mean() + 3*np.gradient(te.mean(axis=1)).std(), np.gradient(te.mean(axis=1)) > 0.5)
+    if te_bool.sum() > 30: 
+        raise data_exceptions.ProfileAnomaly(reason=f'Temperature - {(te_bool).sum()} slices with higher than 3 sigma deviation', shotno=shotno)
     return profiles
 
 def anomaly_detection_machine_parameters(mps: np.ndarray, config: dict, shotno: str) -> np.ndarray: 
@@ -136,6 +150,8 @@ def anomaly_detection_machine_parameters(mps: np.ndarray, config: dict, shotno: 
             mps[:, mp_idx] = np.clip(mps[:, mp_idx], a_min=min_val, a_max=max_val)
     # if key in ['IpiFP']: 
     #     relevant_mp_vals = abs(relevant_mp_vals)
+
+    # TODO: Check  for rapid changes in machine parameters...
     return mps
 
 
@@ -154,14 +170,19 @@ def build(shot_num: str):
         profiles, mps, radii, times = make_arrays(shot_num)
         mps = post_process_machine_parameters(mps, args.config)
         mps = anomaly_detection_machine_parameters(mps, args.config, shot_num)
-        profiles = anomaly_detection_profiles(profiles, args.config)
+        profiles = anomaly_detection_profiles(profiles, args.config, shot_num)
         # TODO: mapping functions
     except data_exceptions.NotDesiredShot as e: 
-        logging.info(f'Shot #{e.shotno} not desired because {e.reason}')
+        logging.info(e.message)
+        # logging.info(f'Shot #{e.shotno} not desired because {e.reason}')
     except data_exceptions.RawPulseDictErrorMissingInformation as e: 
-        logging.warning(f'Shot #{e.shotno} missing data: {e.reason}')
+        logging.warning(e.message)
+        # logging.warning(f'Shot #{e.shotno} missing data: {e.reason}')
     except data_exceptions.ShortPulse as e: 
-        logging.info(f'Shot #{e.shotno} deemed too short: {e.total_time}')
+        logging.info(e.message)
+        # logging.info(f'Shot #{e.shotno} deemed too short: {e.total_time}')
+    except data_exceptions.ProfileAnomaly as e: 
+        logging.warning(e.message)
     except RuntimeWarning as e: 
         logging.error(f'Shot #{shot_num} has unexpected error: {e}')
     else: 

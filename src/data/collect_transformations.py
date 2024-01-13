@@ -67,12 +67,12 @@ prof_mean, mp_mean = RunningStats('prof'), RunningStats('mp')
 for k, (prof, mp) in tqdm(enumerate(shot_files)): 
     prof, mp = np.load(prof), np.load(mp)
     prof[:, 0]*= 1e-19
-    mp = np.nan_to_num(mp)
+    # mp = np.nan_to_num(mp)
     # if 'P_TOT/P_LH' in saved_mp_names: 
     #     mp[:, saved_mp_names.index('P_TOT/P_LH')] = np.clip(mp[:, saved_mp_names.index('P_TOT/P_LH')], a_min=0, a_max=20)
-    if "tau_tot" in saved_mp_names: 
-        mp[:, saved_mp_names.index("tau_tot")] = np.clip(mp[:, saved_mp_names.index('tau_tot')], a_min=1e-5, a_max=3)
-        # sample_pulse_mps[:, tau_tot_idx] = torch.clamp(torch.nan_to_num(sample_pulse_mps[:, tau_tot_idx]), min=1e-5, max=3)
+    # if "tau_tot" in saved_mp_names: 
+    #     mp[:, saved_mp_names.index("tau_tot")] = np.clip(mp[:, saved_mp_names.index('tau_tot')], a_min=1e-5, a_max=3)
+    # sample_pulse_mps[:, tau_tot_idx] = torch.clamp(torch.nan_to_num(sample_pulse_mps[:, tau_tot_idx]), min=1e-5, max=3)
     for p, m in zip(prof, mp): 
         prof_mean.push(p)
         mp_mean.push(m)
@@ -88,9 +88,9 @@ prof_stds_subverted[0]*= 1e19
 mp_means = mp_mean.mean()
 mp_stds= mp_mean.standard_deviation()
 print(mp_means.shape, mp_stds.shape)
-label_idxs = [saved_mp_names.index(name) for name in ['label_peeling','label_ballooning','label_transition', "stability_ratio"] if name in saved_mp_names]
-mp_means[label_idxs] = np.zeros((len(label_idxs),))
-mp_stds[label_idxs] = np.ones((len(label_idxs),))
+# label_idxs = [saved_mp_names.index(name) for name in ['label_peeling','label_ballooning','label_transition', "stability_ratio"] if name in saved_mp_names]
+# mp_means[label_idxs] = np.zeros((len(label_idxs),))
+# mp_stds[label_idxs] = np.ones((len(label_idxs),))
 print(mp_means, mp_stds)
 print(label_idxs)
 transformation_dict: dict = dict(mp_means=mp_means, mp_stds=mp_stds, 

@@ -1,3 +1,9 @@
+class ProfileAnomaly(Exception): 
+    def __init__(self, reason: str, shotno: str) -> None: 
+        self.shotno = shotno
+        self.reason = reason
+        self.message = f'Profile anomaly in {shotno}: {reason}'
+        super().__init__(reason, shotno)
 
 class NotDesiredShot(Exception): 
     def __init__(self, reason: str, shotno: str) -> None:
