@@ -8,4 +8,3 @@ feature_filtering:
     - only-hmode
     - no-impurities
     - no-icrh
-    - no-nbi

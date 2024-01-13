@@ -17,3 +17,10 @@ feature_filtering:
     - no-ecrh
     - no-icrh
 ```
+
+# Anomaly detections
+
+1. Based on the filter-by-time, we take discharge times where the IDA data exists, 
+    - Therefore, if machine parameters are interpolated across that domain, we should check how the interpolation occurs
+
+

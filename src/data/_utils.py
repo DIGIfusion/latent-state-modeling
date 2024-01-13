@@ -8,6 +8,162 @@ import pandas as pd
 from data_exceptions import NotDesiredShot, RawPulseDictErrorMissingInformation, ShortPulse
 
 negative_byte = b''
+PULSE_DICT = NewType('AUG_DICT', Dict[str, Dict[str, Dict[str, np.ndarray]]]) 
+
+""" 
+! -------------------------------------------------
+! Filtering based on journal entries and other shenanigans 
+! -------------------------------------------------
+"""
+def check_non_disruptive(pulse_dict):
+    """ Returns true if pulse is non disruptive """
+    return pulse_dict['journal']['b_disr'] == negative_byte
+
+def check_only_hmode(pulse_dict):
+    """ Returns True if pulse is h-mode """
+    return pulse_dict['journal']['b_hmod'] != negative_byte
+
+
+def check_no_impurities(pulse_dict):
+    """ Returns True if pulse does not have impurities as per journal """
+    """
+    'gas_ne': b'',
+     'gas_ar': b'',
+     'gas_n2': b'',
+     'gas_kr': b'',
+     'gas_xe': b'',
+     'gas_cd4': b'',
+     'gas_other': b''
+    """
+    # return (pulse_dict['journal']['imp'] == negative_byte & (not pulse_dict['machine_parameters']['N_tot'] > 0.1).any())
+    return (pulse_dict['journal']['gas_ne'] == negative_byte and pulse_dict['journal']['gas_ar'] == negative_byte and pulse_dict['journal']['gas_n2'] == negative_byte and pulse_dict['journal']['gas_kr'] == negative_byte and pulse_dict['journal']['gas_xe'] == negative_byte and pulse_dict['journal']['gas_cd4'] == negative_byte and  (pulse_dict['machine_parameters']['N_tot']['data'] < 0.001).all())
+    
+def check_no_nbi(pulse_dict): 
+    """ Returns true if pulse does not have NBI heating based on journal data""" 
+    """'nbi1l': 0.0,
+    'nbi1sp': 0.0,
+    'nbi1g': b'',
+    'nbi1b': 0.0,
+    'nbi1e': 0.0,
+    """
+    keys_g = [f'nbi{i}g' for i in range(1, 9)]
+    keys_other = [f'nbi{i}{c}' for i in range(1, 9) for c in ['sp', 'b', 'e', 'l']]
+    
+    return all(pulse_dict['journal'][key] == negative_byte for key in keys_g) and \
+           all(pulse_dict['journal'][key] == 0.0 for key in keys_other)
+
+def check_no_ecrh(pulse_dict): 
+    """ Returns true if pulse does not have ECRH heating based on journal data""" 
+    """
+    'ecrh1l': 292300.0,
+    'ecrh1f': 140000000000.0,
+    'ecrh1b': 3.5,
+    'ecrh1e': 4.279,
+    """
+    keys_other = [f'ecrh{i}{c}' for i in range(1, 9) for c in ['l', 'f', 'b', 'e']]
+    
+    return all(pulse_dict['journal'][key] == 0.0 for key in keys_other)
+
+def check_no_icrh(pulse_dict): 
+    """ Returns true if pulse does not have ECRH heating based on journal data""" 
+    """
+    'icrh1l': 292300.0,
+    'icrh1f': 140000000000.0,
+    'icrh1b': 3.5,
+    'icrh1e': 4.279,
+    """
+    keys_other = [f'icrh{i}{c}' for i in range(1, 5) for c in ['l', 'f', 'b', 'e']]
+    
+    return all(pulse_dict['journal'][key] == 0.0 for key in keys_other)
+
+
+filter_checks = {
+    'non-disruptive': check_non_disruptive,
+    'only-hmode': check_only_hmode,
+    'no-impurities': check_no_impurities, 
+    'no-nbi': check_no_nbi, 
+    'no-ecrh': check_no_ecrh, 
+    'no-icrh': check_no_icrh
+}
+
+
+def pre_filter_aug_pulses_from_journal(pulse_dict: PULSE_DICT, shot_num: str, filters: List[str]) -> None: 
+    for filter_name in filters:
+        check_function = filter_checks.get(filter_name)
+        if check_function is None: 
+            raise NotImplementedError(f'{filter_name}  not implemented yet')
+        if not check_function(pulse_dict):
+            raise NotDesiredShot(filter_name, shot_num)
+        
+    # Grab only h-mode, deterium fuelled, non-disruptive plasmas
+    """
+    filters = ['b_hmod', 'gas_d', 'b_disr'] # TODO: move outside to script
+    for filter in filters:     
+        if filter in ['b_hmod', 'gas_d']: 
+            if pulse_dict['journal'][filter] == negative_byte: 
+                raise NotDesiredShot(filter, shot_num)
+        elif filter in ['b_disr']: 
+            if pulse_dict['journal'][filter] != negative_byte: 
+                raise NotDesiredShot(filter, shot_num)
+    """
+    return None 
+    
+def pre_filter_pulses(pulse_dict: PULSE_DICT, shot_num: str, device_name: str, **kwargs) -> None: 
+    if device_name == 'AUG': 
+        pre_filter_aug_pulses_from_journal(pulse_dict, shot_num)
+    else: 
+        jet_pdb = kwargs.get('jet_pdb')
+        shot_loc_pdb = jet_pdb[jet_pdb['shot'] == int(shot_num)].iloc[0]
+        if int(shot_num) < 81000: 
+            raise NotDesiredShot('JET-C pulse', shot_num)
+        if shot_loc_pdb['flowrateofseededimpurity10^22(e/s)'] > 0.05e22: 
+            raise NotDesiredShot('Impurity seeded', shot_num)
+        if shot_loc_pdb['FLAG:HYDROGEN'] > 0.0 or shot_loc_pdb['FLAG:HeJET-C'] > 0.0: 
+            raise NotDesiredShot('Not pure deterium', shot_num)
+        if shot_loc_pdb['FLAG:Kicks'] > 0.0 or shot_loc_pdb['FLAG:RMP'] > 0.0 or shot_loc_pdb['FLAG:pellets'] > 0.0:
+            raise NotDesiredShot('Kicks, RMPs, or pellets', shot_num)
+
+def filter_pulses_with_missing_data(pulse_dict: PULSE_DICT, shotno: str, device_name: str='AUG'):
+    for key in pulse_dict.keys(): 
+        if pulse_dict[key] is None: 
+            if key == 'journal' and device_name == 'JET':
+                continue 
+            else: 
+                raise RawPulseDictErrorMissingInformation(key, shotno=shotno)
+            
+    for key in pulse_dict['profiles'].keys(): 
+        if pulse_dict['profiles'][key] is None: 
+            raise RawPulseDictErrorMissingInformation(key, shotno=shotno)
+
+    for key in pulse_dict['machine_parameters'].keys(): 
+        try: 
+            mp_data, mp_time = pulse_dict['machine_parameters'][key]['data'], pulse_dict['machine_parameters'][key]['time']
+            if len(mp_data) != len(mp_time): 
+                raise RawPulseDictErrorMissingInformation(f'{key}\' time and data do not have same length', shotno)
+        except KeyError as e: 
+            raise RawPulseDictErrorMissingInformation(key, shotno)
+
+        
+
+def check_pulse_arrays(profiles: np.ndarray, mps: np.ndarray, radii: np.ndarray,  times: np.ndarray, shotno: str, mp_names: List[str], device_name='AUG'): 
+    if any(len(arr) == 0 for arr in [profiles, mps, times, radii]): 
+        raise NotDesiredShot(reason='empty', shotno=shotno)
+    
+    if device_name == 'AUG': 
+        if times[-1] - times[0] < 4: 
+            raise ShortPulse(shotno, times[-1] - times[0])
+        for name in ['IpiFP', 'BTF', 'N_tot', 'q95']: 
+            mean_mp_val = mps[:, mp_names.index(name)].mean()
+            if name in ['IpiFP'] and mean_mp_val < 0: 
+                raise NotDesiredShot(reason=f'{name} avg for pulse < 0', shotno=shotno)
+            if name in ['BTF', 'N_tot', 'q95'] and mean_mp_val > 0: 
+                raise NotDesiredShot(reason=f'{name} avg for pulse > 0', shotno=shotno)
+
+    else: 
+        pass 
+# ! -------------------------------------------------
+# ! Random useful functions
+# ! -------------------------------------------------
 
 def get_list_of_strings_from_file(filename: str) -> List[str]: 
     with open(filename, 'r') as f:
@@ -39,7 +195,7 @@ def parse_additional_feature_cols(original_feature_cols: List[str]) -> List[str]
     return parsed_feature_cols
 
 
-PULSE_DICT = NewType('AUG_DICT', Dict[str, Dict[str, Dict[str, np.ndarray]]]) 
+
 def get_local_pulse_dict(shot_number: Union[int, str], folder_name: str): 
     filename = os.path.join(folder_name, shot_number)
     with open(filename, 'rb') as file: 
@@ -57,33 +213,11 @@ def get_local_pulse_arrays(shot_number: Union[int, str], folder_name: str) -> Tu
     return profiles, mps, time, radii
 
 
-def filter_pulses_with_missing_data(pulse_dict: PULSE_DICT, shotno: str, device_name: str='AUG'):
-    for key in pulse_dict.keys(): 
-        if pulse_dict[key] is None: 
-            if key == 'journal' and device_name == 'JET':
-                continue 
-            else: 
-                raise RawPulseDictErrorMissingInformation(key, shotno=shotno)
-            
-    for key in pulse_dict['profiles'].keys(): 
-        if pulse_dict['profiles'][key] is None: 
-            raise RawPulseDictErrorMissingInformation(key, shotno=shotno)
 
-    
-def check_pulse_arrays(profiles: np.ndarray, mps: np.ndarray, radii: np.ndarray,  times: np.ndarray, shotno: str, mp_names: List[str], device_name='AUG'): 
-    if any(len(arr) == 0 for arr in [profiles, mps, times, radii]): 
-        raise NotDesiredShot(reason='empty', shotno=shotno)
-    if device_name == 'AUG': 
-        if times[-1] - times[0] < 4: 
-            raise ShortPulse(shotno, times[-1] - times[0])
-        for name in ['IpiFP', 'BTF', 'N_tot', 'q95']: 
-            mean_mp_val = mps[:, mp_names.index(name)].mean()
-            if name in ['IpiFP'] and mean_mp_val < 0: 
-                raise NotDesiredShot(reason=f'{name} avg for pulse < 0', shotno=shotno)
-            if name in ['BTF', 'N_tot', 'q95'] and mean_mp_val > 0: 
-                raise NotDesiredShot(reason=f'{name} avg for pulse > 0', shotno=shotno)
-    else: 
-        pass 
+# !-------------------------------------------------
+# ! Unsorted possibly junk, I am a hoarder
+# ! Or aaro wrote it, then it is useful junk
+# !-------------------------------------------------
 
 def select_specific_time_slices(relevant_profiles: np.ndarray, relevant_machine_parameters: np.ndarray, relevant_radii: np.ndarray, relevant_times: np.ndarray, mp_names: List[str], device_name: str): 
     # limit by heating power 
@@ -177,66 +311,7 @@ def example_mappings(profiles, mps, radii, time, device_name: str, shotno):
         raise NotDesiredShot(reason='not enough profiles after remapping', shotno=shotno)
     else: 
         return np.stack(profiles_remapped,0), np.stack(mps_remapped,0), np.stack(times_remapped,0), np.stack(radii_remapped,0)
-    
-def map_pulse_dict_to_numpy_arrays(pulse_dict: PULSE_DICT, filter_time_by: str, relevant_mps_columns: List[str], device_name:str='AUG', **kwargs) -> List[np.ndarray]: 
 
-    profile_data, mp_data = pulse_dict['profiles'], pulse_dict['machine_parameters']
-    if mp_data.get('PECR_TOT', None) is None: 
-        mp_data['PECR_TOT'] = {}
-        mp_data['PECR_TOT']['time'], mp_data['PECR_TOT']['data'] = 'NO ECRH USED', None
-    ida_times, ne, te, radius = profile_data['time'], profile_data['ne'], profile_data['Te'], profile_data['radius']
-    if ne.shape[0] == 200: 
-        # get time on x-axis for AUG pulses
-        ne, te, radius = ne.T, te.T, radius.T
-    profiles = np.stack((ne, te), 1)
-
-    avail_cols = [key for key in relevant_mps_columns if key in mp_data.keys()]
-
-    MP_TIME_LIST = np.array([(min(mp_data[key]['time']), max(mp_data[key]['time'])) for key in avail_cols if isinstance(mp_data[key], dict) and not isinstance(mp_data[key]['time'], str) and mp_data.get(key) is not None])
-    largest_mp_start_time, smallest_mp_end_time = MP_TIME_LIST.max(axis=0)[0], MP_TIME_LIST.min(axis=0)[1]
-    smallest_ida_end_time, largest_ida_start_time = ida_times[-1], ida_times[0]
-    
-    if filter_time_by == 'both': 
-        t1, t2 = max(largest_mp_start_time, largest_ida_start_time), min(smallest_mp_end_time, smallest_ida_end_time)
-    elif filter_time_by == 'ida': 
-        t1, t2 = largest_ida_start_time, smallest_ida_end_time
-    elif filter_time_by == 'flattop': 
-        if device_name == 'AUG': 
-            t1, t2 = pulse_dict['journal']['flatb'], pulse_dict['journal']['flate']
-        else: 
-            raise NotImplementedError
-    
-    relevant_time_windows_bool: np.array = np.logical_and(ida_times > t1, ida_times < t2)
-    
-    relevant_time_windows: np.array = ida_times[relevant_time_windows_bool]
-    relevant_profiles = profiles[relevant_time_windows_bool]
-    relevant_radii = radius[relevant_time_windows_bool]
-
-    relevant_machine_parameters: np.array = np.empty((len(relevant_profiles), len(relevant_mps_columns)))
-    for mp_idx, key in enumerate(relevant_mps_columns): 
-        relevant_mp_vals = np.zeros(len(relevant_profiles))
-        if not mp_data.get(key): # check for key! 
-            mp_raw_data, mp_raw_time = None, None
-        else: 
-            mp_raw_data, mp_raw_time = mp_data[key]['data'], mp_data[key]['time']
-        if mp_raw_time is None or isinstance(mp_raw_time, str): # this catches whenever NBI isn't working or the string in JET pulse files 'NO_ICRH_USED'
-            pass 
-        elif len(mp_raw_data) != len(mp_raw_time): 
-            raise RawPulseDictErrorMissingInformation(f'MP {key} does not have equal data and time lengths', 00000)
-        else:
-            f = interp1d(mp_raw_time, mp_raw_data, bounds_error=False, fill_value=0.0)
-            relevant_mp_vals = f(relevant_time_windows)
-        if key in ['D_tot', 'N_tot']: 
-            relevant_mp_vals*=1e-22
-            relevant_mp_vals = np.where(relevant_mp_vals < 1e-5, 0.0, relevant_mp_vals)# np.clip(relevant_mp_vals, a_min=1e-5, a_max=None)
-        if key == 'tau_tot': 
-            relevant_mp_vals = np.clip(np.nan_to_num(relevant_mp_vals), a_min=1e-5, a_max=3)
-        # if key in ['Rgeo', 'ahor']: 
-        #     relevant_mp_vals = np.clip(relevant_mp_vals, a_min=1e-5, a_max=None)
-        # if key in ['IpiFP']: 
-        #     relevant_mp_vals = abs(relevant_mp_vals)
-        relevant_machine_parameters[:, mp_idx] = relevant_mp_vals
-    return relevant_profiles, relevant_machine_parameters, relevant_radii, relevant_time_windows, relevant_mps_columns
 
 def precompute_combined_features(additional_feature_engineering_cols: List[str], relevant_mp_columns:List[str], relevant_profiles: np.ndarray, relevant_machine_parameters: np.ndarray, relevant_radii: np.ndarray, relevant_times: np.ndarray) -> dict: 
     computed_features = {}
@@ -250,112 +325,6 @@ def precompute_combined_features(additional_feature_engineering_cols: List[str],
         computed_features = dict(**computed_features, stability_labels=stability_labels, stability_ratios=stability_ratios)
     return computed_features
 
-def check_non_disruptive(pulse_dict):
-    """ Returns true if pulse is non disruptive """
-    return pulse_dict['journal']['b_disr'] == negative_byte
-
-def check_only_hmode(pulse_dict):
-    """ Returns True if pulse is h-mode """
-    return pulse_dict['journal']['b_hmod'] != negative_byte
-
-
-def check_no_impurities(pulse_dict):
-    """ Returns True if pulse does not have impurities as per journal """
-    """
-    'gas_ne': b'',
-     'gas_ar': b'',
-     'gas_n2': b'',
-     'gas_kr': b'',
-     'gas_xe': b'',
-     'gas_cd4': b'',
-     'gas_other': b''
-    """
-    # return (pulse_dict['journal']['imp'] == negative_byte & (not pulse_dict['machine_parameters']['N_tot'] > 0.1).any())
-    return (pulse_dict['journal']['gas_ne'] == negative_byte and pulse_dict['journal']['gas_ar'] == negative_byte and pulse_dict['journal']['gas_n2'] == negative_byte and pulse_dict['journal']['gas_kr'] == negative_byte and pulse_dict['journal']['gas_xe'] == negative_byte and pulse_dict['journal']['gas_cd4'] == negative_byte and  (pulse_dict['machine_parameters']['N_tot']['data'] < 0.001).all())
-    
-def check_no_nbi(pulse_dict): 
-    """ Returns true if pulse does not have NBI heating based on journal data""" 
-    """'nbi1l': 0.0,
-    'nbi1sp': 0.0,
-    'nbi1g': b'',
-    'nbi1b': 0.0,
-    'nbi1e': 0.0,
-    """
-    keys_g = [f'nbi{i}g' for i in range(1, 9)]
-    keys_other = [f'nbi{i}{c}' for i in range(1, 9) for c in ['sp', 'b', 'e', 'l']]
-    
-    return all(pulse_dict['journal'][key] == negative_byte for key in keys_g) and \
-           all(pulse_dict['journal'][key] == 0.0 for key in keys_other)
-
-def check_no_ecrh(pulse_dict): 
-    """ Returns true if pulse does not have ECRH heating based on journal data""" 
-    """
-    'ecrh1l': 292300.0,
-    'ecrh1f': 140000000000.0,
-    'ecrh1b': 3.5,
-    'ecrh1e': 4.279,
-    """
-    keys_other = [f'ecrh{i}{c}' for i in range(1, 9) for c in ['l', 'f', 'b', 'e']]
-    
-    return all(pulse_dict['journal'][key] == 0.0 for key in keys_other)
-
-def check_no_icrh(pulse_dict): 
-    """ Returns true if pulse does not have ECRH heating based on journal data""" 
-    """
-    'icrh1l': 292300.0,
-    'icrh1f': 140000000000.0,
-    'icrh1b': 3.5,
-    'icrh1e': 4.279,
-    """
-    keys_other = [f'icrh{i}{c}' for i in range(1, 5) for c in ['l', 'f', 'b', 'e']]
-    
-    return all(pulse_dict['journal'][key] == 0.0 for key in keys_other)
-
-
-filter_checks = {
-    'non-disruptive': check_non_disruptive,
-    'only-hmode': check_only_hmode,
-    'no-impurities': check_no_impurities, 
-    'no-nbi': check_no_nbi, 
-    'no-ecrh': check_no_ecrh, 
-    'no-icrh': check_no_icrh
-}
-
-
-def pre_filter_aug_pulses_from_journal(pulse_dict: PULSE_DICT, shot_num: str, filters: List[str]) -> None: 
-    for filter_name in filters:
-        check_function = filter_checks.get(filter_name)
-        if check_function is None: 
-            raise NotImplementedError(f'{filter_name}  not implemented yet')
-        if not check_function(pulse_dict):
-            raise NotDesiredShot(filter_name, shot_num)
-        
-    # Grab only h-mode, deterium fuelled, non-disruptive plasmas
-    """
-    filters = ['b_hmod', 'gas_d', 'b_disr'] # TODO: move outside to script
-    for filter in filters:     
-        if filter in ['b_hmod', 'gas_d']: 
-            if pulse_dict['journal'][filter] == negative_byte: 
-                raise NotDesiredShot(filter, shot_num)
-        elif filter in ['b_disr']: 
-            if pulse_dict['journal'][filter] != negative_byte: 
-                raise NotDesiredShot(filter, shot_num)
-    """
-    return None 
-def pre_filter_pulses(pulse_dict: PULSE_DICT, shot_num: str, device_name: str, **kwargs) -> None: 
-    if device_name == 'AUG': 
-        pre_filter_aug_pulses_from_journal(pulse_dict, shot_num)
-    else: 
-        jet_pdb = kwargs.get('jet_pdb')
-        shot_loc_pdb = jet_pdb[jet_pdb['shot'] == int(shot_num)].iloc[0]
-        if int(shot_num) < 81000: 
-            raise NotDesiredShot('JET-C pulse', shot_num)
-        if shot_loc_pdb['flowrateofseededimpurity10^22(e/s)'] > 0.05e22: 
-            raise NotDesiredShot('Impurity seeded', shot_num)
-        if shot_loc_pdb['FLAG:HYDROGEN'] > 0.0 or shot_loc_pdb['FLAG:HeJET-C'] > 0.0: 
-            raise NotDesiredShot('Not pure deterium', shot_num)
-        if shot_loc_pdb['FLAG:Kicks'] > 0.0 or shot_loc_pdb['FLAG:RMP'] > 0.0 or shot_loc_pdb['FLAG:pellets'] > 0.0:
-            raise NotDesiredShot('Kicks, RMPs, or pellets', shot_num)
 
 def get_jetpdb(filename: str): 
     df = pd.read_csv(filename)
