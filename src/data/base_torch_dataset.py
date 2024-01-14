@@ -25,14 +25,14 @@ def compute_raggedmmap(data_dir: str, data_str: str="PROFS") -> RaggedMmap:
         ragged_mmap = RaggedMmap.from_generator(out_dir=save_name, 
                                              sample_generator=load_data(relevant_paths),
                                              verbose=True, 
-                                             batch_size=256, wrapper_fn=torch.tensor)
+                                             batch_size=528, wrapper_fn=torch.tensor)
     return ragged_mmap
 
 class BaseMemMapDataset(Dataset, metaclass=abc.ABCMeta): 
     def __init__(self, **kwargs): 
         self.data_path = kwargs.get('data_path', '/')
         self.device = kwargs.get('device', 'cpu')
-        print('data path', self.data_path)
+        print('data path', self.data_path, 'device', self.device)
         self.data = self.get_data_from_raggedmmaps(self.data_path)
         self.shot_numbers, self.total_num_pulses, self.total_num_slices, self.list_num_slices, self.list_sampled_indicies, self.cumsum_num_slices = self.get_pulse_and_slice_information()
         self.observational_channels, self.observational_spatial_dim = self.data['profs'][0].shape[1:]
@@ -45,6 +45,8 @@ class BaseMemMapDataset(Dataset, metaclass=abc.ABCMeta):
         transformation_file = kwargs.get('transformation_file', 'transformations.pickle')
         self.mean_actions, self.std_actions, self.mean_observations, self.std_observations = self.get_transformation_means_and_stds_from_file(transformation_file)
         
+        # TODO make a gpu version of this if needed
+        # thing is we do the transformations during the data loading query so its on CPU
         self.transform_mps = lambda u: (u - self.mean_actions)/ self.std_actions
         self.transform_profs = lambda u: (u  - self.mean_observations) / self.std_observations
         
@@ -64,7 +66,7 @@ class BaseMemMapDataset(Dataset, metaclass=abc.ABCMeta):
         
         if kwargs.get("clamp_observations_to_reals", False): 
             print('Creating Observational clamping vector')
-            self.observations_clamp_vector = ((torch.zeros((1, self.observational_channels, self.observational_spatial_dim), device=self.device) - self.mean_observations) / self.std_observations).float()
+            self.observations_clamp_vector = ((torch.zeros((1, self.observational_channels, self.observational_spatial_dim), device=self.device) - self.mean_observations.to(self.device)) / self.std_observations.to(self.device)).float()
         
         self.denorm_profs = lambda u: (u*self.std_observations.to(u.device)) + self.mean_observations.to(u.device)
 
@@ -86,7 +88,7 @@ class BaseMemMapDataset(Dataset, metaclass=abc.ABCMeta):
         with open(os.path.join(trans_data_path, transform_file), 'rb') as file: 
             print(f'loading transformations from {trans_data_path}/{transform_file} ')
             transformation_dict: dict = pickle.load(file)
-        return [torch.from_numpy(transformation_dict[name]).to(self.device) for name in ['mp_means', 'mp_stds', 'prof_means', 'prof_stds']]
+        return [torch.from_numpy(transformation_dict[name]) for name in ['mp_means', 'mp_stds', 'prof_means', 'prof_stds']]
 
 
     @abc.abstractmethod 

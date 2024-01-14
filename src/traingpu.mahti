@@ -1,0 +1,26 @@
+#!/bin/bash
+#SBATCH --job-name=STABILITY_BUILD_ARRAYS
+#SBATCH --account=project_2005083
+#SBATCH --time=0:15:00
+#SBATCH --partition=gputest
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=40
+#SBATCH --gres=gpu:a100:1
+#SBATCH --out=./slurm_out/training.out
+
+module purge 
+module load pytorch
+
+WRKDIR=/scratch/project_2005083/latent-state-modeling
+source $WRKDIR/.venv/bin/activate
+
+# Load .env files 
+export $(cat .env | xargs)
+
+# export PYTHONPATH=$WRKDIR/src
+export PYTHONPATH=$WRKDIR
+
+ARRAY_FOLDER=$WRKDIR/local_data_test
+# -af=$ARRAY_FOLDER
+srun python3 train.py -cf=SRL_1

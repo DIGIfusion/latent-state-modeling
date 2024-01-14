@@ -1,7 +1,7 @@
 from .base_torch_dataset import BaseMemMapDataset
 import torch
 import torch.nn.functional as F
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Optional
 import os 
 from common.interfaces import D
 class SliceDataset(BaseMemMapDataset): 
@@ -9,7 +9,7 @@ class SliceDataset(BaseMemMapDataset):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def get_action_index_filtering(self, actions_to_filter: List[str] | None = None) -> Tuple[List[int], List[str], Callable]: 
+    def get_action_index_filtering(self, actions_to_filter: Optional[List[str]] = None) -> Tuple[List[int], List[str], Callable]: 
         if actions_to_filter is None: 
             filter_mps_idxs, filter_mps_names, filter_mps_transform = None, [None], lambda u: u 
         else: 

@@ -193,7 +193,8 @@ def parse_additional_feature_cols(original_feature_cols: List[str]) -> List[str]
             parsed_feature_cols.append(val)
     return parsed_feature_cols
 
-
+def load_csv(fname: str, data_loc: str) -> pd.DataFrame:
+    return pd.read_csv(os.path.join(data_loc, fname))
 
 def get_local_pulse_dict(shot_number: Union[int, str], folder_name: str): 
     filename = os.path.join(folder_name, shot_number)

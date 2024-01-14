@@ -1,6 +1,7 @@
 from data.base_torch_dataset import BaseMemMapDataset
 from data.pulse_dataset import PulseDataset
 from data.slice_dataset import SliceDataset
+from data._utils import load_csv
 
 import torch 
 import random 
@@ -31,11 +32,25 @@ class DatasetInterface():
             shot_numbers = self.dataset.shot_numbers
             if split == 'iter_baseline': 
                 queries = [31147, 31148, 32472, 34454]
+                train_idxs, val_idxs, test_idxs = [[shot_numbers.index(q) for q in queries] for i in [0, 1, 2]]
             elif split == 'iter_baseline_low_nu':
                 # 35537, 35538, 35539, (Disr, 35540, 35536)
                 queries = [35536, 35537,35538, 35539]
-            train_idxs, val_idxs, test_idxs = [[shot_numbers.index(q) for q in queries] for i in [0, 1, 2]]
-            # TODO: Split based on program!! 
+                train_idxs, val_idxs, test_idxs = [[shot_numbers.index(q) for q in queries] for i in [0, 1, 2]]
+            elif split == 'program': 
+                extract_shot_nums = lambda groups: [shot_num for group in groups for shot_num in group[1].index]
+                df = load_csv('dataset_metadata.csv', self.dataset.data_path)
+                grouped = list(df.groupby('program'))
+                random.shuffle(grouped)
+                train_split, val_split = 0.6, 0.2
+                train_groups = grouped[:int(len(grouped)*train_split)]
+                val_test_groups = grouped[int(len(grouped)*train_split):]
+                val_groups = val_test_groups[:int(len(val_test_groups)*val_split)]
+                test_groups = val_test_groups[int(len(val_test_groups)*val_split):]
+
+                train_idxs = extract_shot_nums(train_groups) 
+                val_idxs =  extract_shot_nums(val_groups)
+                test_idxs =  extract_shot_nums(test_groups)
         else: 
             raise ValueError('Split variable not configured propoerly, should be float, str, or dict')
         return train_idxs, val_idxs, test_idxs

@@ -1,7 +1,7 @@
 from .base_torch_dataset import BaseMemMapDataset
 import torch
 import torch.nn.functional as F
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Optional
 import os 
 from common.interfaces import D
 class PulseDataset(BaseMemMapDataset): 
@@ -12,7 +12,8 @@ class PulseDataset(BaseMemMapDataset):
         self.pad_size = int(max(self.list_num_slices).item())
         self.constant_pad_val = -1
         self.chunk_size = kwargs.get('chunk_size', 10000)
-    def get_action_index_filtering(self, actions_to_filter: List[str] | None = None) -> Tuple[List[int], List[str], Callable]: 
+        # TypeError: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+    def get_action_index_filtering(self, actions_to_filter: Optional[List[str]] = None) -> Tuple[List[int], List[str], Callable]: 
         if actions_to_filter is None: 
             filter_mps_idxs, filter_mps_names, filter_mps_transform = None, [None], lambda u: u 
         else: 
