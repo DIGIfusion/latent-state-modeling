@@ -1,5 +1,5 @@
 import argparse
-from typing import List, Union
+from typing import List, Union, Tuple
 import os 
 from multiprocessing import Pool
 import psutil
@@ -8,7 +8,7 @@ import _utils as datautils
 import yaml 
 import sys 
 import logging 
-import data_exceptions
+# import datautils
 
 negative_byte = b''
 
@@ -29,7 +29,7 @@ def make_arrays(shot_num):
     relevant_machine_parameters = np.concatenate([relevant_machine_parameters, additional_feature_cols], 1)
     precomputed_features = datautils.precompute_combined_features(args.config['additional_feature_engineering'], relevant_mp_columns, relevant_profiles, relevant_machine_parameters, relevant_radii, relevant_times)
     for n_idx, feature in enumerate(args.config['additional_feature_engineering'], start=len(relevant_mp_columns)):
-        relevant_profiles, relevant_machine_parameters, relevant_radii, relevant_times = datautils.map_additional_feature(feature, n_idx, relevant_mp_columns, relevant_profiles, relevant_machine_parameters, relevant_radii, relevant_times, pulse_dict, precomputed_features)
+        relevant_profiles, relevant_machine_parameters, relevant_radii, relevant_times = datautils.map_additional_feature(feature, n_idx, relevant_mp_columns, relevant_profiles, relevant_machine_parameters, relevant_radii, relevant_times, precomputed_features, pulse_dict)
 
     return relevant_profiles, relevant_machine_parameters, relevant_radii, relevant_times
 
@@ -76,7 +76,7 @@ def map_pulse_dict_to_numpy_arrays(pulse_dict: datautils.PULSE_DICT, relevant_mp
             mp_raw_data, mp_raw_time = None, None
         else: 
             mp_raw_data, mp_raw_time = mp_data[key]['data'], mp_data[key]['time']
-        f = interp1d(mp_raw_time, mp_raw_data, bounds_error=False, fill_value=(mp_raw_data[0], mp_raw_data[1]))
+        f = interp1d(mp_raw_time, mp_raw_data, bounds_error=False, fill_value=(mp_raw_data[0], mp_raw_data[-1]))
         relevant_mp_vals = f(relevant_time_windows)
         relevant_machine_parameters[:, mp_idx] = relevant_mp_vals
     return relevant_profiles, relevant_machine_parameters, relevant_radii, relevant_time_windows, relevant_mps_columns
@@ -112,17 +112,18 @@ def anomaly_detection_profiles(profiles: np.ndarray, config: dict, shotno: str) 
     ne_bool = np.logical_and(np.gradient(ne.mean(axis=1)) > np.gradient(ne.mean(axis=1)).mean() + 3*np.gradient(ne.mean(axis=1)).std(), np.gradient(ne.mean(axis=1)) > 0.5)
     # TODO: check against the gas injection! 
     if ne_bool.sum() > 30: 
-        raise data_exceptions.ProfileAnomaly(reason=f'Density - {(ne_bool).sum()} slices with higher than 3 sigma deviation', shotno=shotno)
+        raise datautils.ProfileAnomaly(reason=f'Density - {(ne_bool).sum()} slices with higher than 3 sigma deviation', shotno=shotno)
     # TODO: check against the power injection! 
     te_bool = np.logical_and(np.gradient(te.mean(axis=1)) > np.gradient(te.mean(axis=1)).mean() + 3*np.gradient(te.mean(axis=1)).std(), np.gradient(te.mean(axis=1)) > 0.5)
     if te_bool.sum() > 30: 
-        raise data_exceptions.ProfileAnomaly(reason=f'Temperature - {(te_bool).sum()} slices with higher than 3 sigma deviation', shotno=shotno)
+        raise datautils.ProfileAnomaly(reason=f'Temperature - {(te_bool).sum()} slices with higher than 3 sigma deviation', shotno=shotno)
     return profiles
 
-def anomaly_detection_machine_parameters(mps: np.ndarray, config: dict, shotno: str) -> np.ndarray: 
+def anomaly_detection_machine_parameters(mps: np.ndarray, config: dict, shotno: str) -> Tuple[np.ndarray, bool]: 
     """ 
     """
     # check RGEO and AHOR
+    retriggering = False
     for key in ['Rgeo', 'ahor']: 
         mp_idx = config['all_mps_cols'].index(key)
         clamp_val = 1e-4
@@ -130,6 +131,7 @@ def anomaly_detection_machine_parameters(mps: np.ndarray, config: dict, shotno: 
             logging.warning(f'{shotno} has very low values of {key}, clamping to {clamp_val}')
             mps[:, mp_idx] = np.clip(mps[:, mp_idx], a_min=clamp_val, a_max=None)
             # if the rgeo has changed then you have to change aspect ratio as well... 
+            retriggering = True
             if 'aspect_ratio' in config['all_mps_cols']: 
                 aspect_idx, r_idx, a_idx = config['all_mps_cols'].index('aspect_ratio'), config['all_mps_cols'].index('Rgeo'), config['all_mps_cols'].index('ahor')
                 mps[:, aspect_idx] = mps[:, r_idx] / mps[:, a_idx]
@@ -143,16 +145,18 @@ def anomaly_detection_machine_parameters(mps: np.ndarray, config: dict, shotno: 
         mp_idx = config['all_mps_cols'].index(key)
         min_val, max_val = 1e-5, 3
         if np.isnan(mps[:, mp_idx]).any(): 
+            retriggering = True
             logging.warning(f'{shotno} has nans, setting to Nans zero, neginf to large neg. value, and posinf to large pos. value')
             mps[:, mp_idx] = np.nan_to_num(mps[:, mp_idx], nan=0.0, neginf=-100000, posinf=1000000)
         if mps[:, mp_idx].min() < min_val or mps[:, mp_idx].max() > max_val: 
             logging.warning(f'{shotno} has {key} lower than {min_val} and higher than {max_val}')
             mps[:, mp_idx] = np.clip(mps[:, mp_idx], a_min=min_val, a_max=max_val)
+            retriggering = True
     # if key in ['IpiFP']: 
     #     relevant_mp_vals = abs(relevant_mp_vals)
 
     # TODO: Check  for rapid changes in machine parameters...
-    return mps
+    return mps, retriggering
 
 
 def save_arrays(save_dir: str, profiles: np.ndarray, mps: np.ndarray, radii: np.ndarray, times: np.ndarray, shotno: Union[int, str]): 
@@ -169,19 +173,27 @@ def build(shot_num: str):
     try: 
         profiles, mps, radii, times = make_arrays(shot_num)
         mps = post_process_machine_parameters(mps, args.config)
-        mps = anomaly_detection_machine_parameters(mps, args.config, shot_num)
+        mps, retrigger_features = anomaly_detection_machine_parameters(mps, args.config, shot_num)
         profiles = anomaly_detection_profiles(profiles, args.config, shot_num)
         # TODO: mapping functions
-    except data_exceptions.NotDesiredShot as e: 
+        # TODO: if anomaly detected, then retrigger below
+        if retrigger_features:
+            precomputed_features = datautils.precompute_combined_features(args.config['additional_feature_engineering'], \
+                                                                        relevant_mp_columns, profiles, mps, radii, times)
+
+            for n_idx, feature in enumerate(args.config['additional_feature_engineering'], start=len(relevant_mp_columns)):
+                profiles, mps, radii, times = datautils.map_additional_feature(feature, n_idx, relevant_mp_columns, profiles, mps, radii, times, precomputed_features)
+
+    except datautils.NotDesiredShot as e: 
         logging.info(e.message)
         # logging.info(f'Shot #{e.shotno} not desired because {e.reason}')
-    except data_exceptions.RawPulseDictErrorMissingInformation as e: 
+    except datautils.RawPulseDictErrorMissingInformation as e: 
         logging.warning(e.message)
         # logging.warning(f'Shot #{e.shotno} missing data: {e.reason}')
-    except data_exceptions.ShortPulse as e: 
+    except datautils.ShortPulse as e: 
         logging.info(e.message)
         # logging.info(f'Shot #{e.shotno} deemed too short: {e.total_time}')
-    except data_exceptions.ProfileAnomaly as e: 
+    except datautils.ProfileAnomaly as e: 
         logging.warning(e.message)
     except RuntimeWarning as e: 
         logging.error(f'Shot #{shot_num} has unexpected error: {e}')
@@ -237,6 +249,6 @@ if __name__ == '__main__':
         for shot in shot_list: 
             build(shot)
 
-    logging.info(f'Total Shots Saved {(len(os.listdir(args.array_folder_name)) - 1 )// 5}')
+    logging.info(f'Total Shots Saved {(len(os.listdir(args.array_folder_name)) - 1 )// 4}')
 
     

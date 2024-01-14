@@ -1,11 +1,10 @@
 import os 
 import shutil
-from typing import List, Union, Dict, NewType, Tuple
+from typing import List, Union, Dict, NewType, Tuple, Optional
 import numpy as np
 import pickle 
 from scipy.interpolate import interp1d
 import pandas as pd 
-from data_exceptions import NotDesiredShot, RawPulseDictErrorMissingInformation, ShortPulse
 
 negative_byte = b''
 PULSE_DICT = NewType('AUG_DICT', Dict[str, Dict[str, Dict[str, np.ndarray]]]) 
@@ -212,7 +211,38 @@ def get_local_pulse_arrays(shot_number: Union[int, str], folder_name: str) -> Tu
 
     return profiles, mps, time, radii
 
+# !-------------------------------------------------
+# ! Data Exceptions
+# !-------------------------------------------------
 
+
+class ProfileAnomaly(Exception): 
+    def __init__(self, reason: str, shotno: str) -> None: 
+        self.shotno = shotno
+        self.reason = reason
+        self.message = f'Profile anomaly in {shotno}: {reason}'
+        super().__init__(reason, shotno)
+
+class NotDesiredShot(Exception): 
+    def __init__(self, reason: str, shotno: str) -> None:
+        self.shotno = shotno
+        self.reason = reason
+        self.message = f'{shotno} not desired because {reason}'
+        super().__init__(reason, shotno)
+
+class RawPulseDictErrorMissingInformation(Exception): 
+    def __init__(self, reason: str, shotno: str) -> None: 
+        self.shotno = shotno
+        self.reason = reason
+        self.message = f'{shotno} not saved because {reason} did not exist'
+        super().__init__(reason, shotno)
+
+class ShortPulse(Exception): 
+    def __init__(self, shotno: str, total_time: float) -> None: 
+        self.shotno = shotno
+        self.total_time = total_time
+        self.message = f'{shotno} not saved because only {total_time}s after making array format'
+        super().__init__(total_time, shotno)
 
 # !-------------------------------------------------
 # ! Unsorted possibly junk, I am a hoarder
@@ -330,7 +360,7 @@ def get_jetpdb(filename: str):
     df = pd.read_csv(filename)
     return df 
 from physics import calculate_plh_ratio, calculate_stability_profiles_and_maxes_for_pulse, calculate_stability_labels
-def map_additional_feature(feature: str, n_idx: int, relevant_mp_columns: List[str], relevant_profiles: np.ndarray, relevant_machine_parameters: np.ndarray, relevant_radii: np.ndarray, relevant_times: np.ndarray, pulse_dict: PULSE_DICT, precomputed_features:dict) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: 
+def map_additional_feature(feature: str, n_idx: int, relevant_mp_columns: List[str], relevant_profiles: np.ndarray, relevant_machine_parameters: np.ndarray, relevant_radii: np.ndarray, relevant_times: np.ndarray, precomputed_features:dict, pulse_dict: Optional[PULSE_DICT]=None) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: 
     if feature == 'aspect_ratio': 
         # major radius / minor radius 
         r_idx, a_idx = relevant_mp_columns.index('Rgeo'), relevant_mp_columns.index('ahor')
@@ -372,7 +402,7 @@ def map_additional_feature(feature: str, n_idx: int, relevant_mp_columns: List[s
         stability_labels = precomputed_features.get('stability_ratios', None)
         vals = np.where(stability_labels == 0, 1, 0)
         relevant_machine_parameters[:, n_idx] = vals
-    elif feature == 'impurity_gas': 
+    elif feature == 'impurity_gas' and pulse_dict is not None: 
         val = np.zeros(len(relevant_machine_parameters))
         impuritykeys = ['gas_he', 'gas_ne', 'gas_ar', 'gas_n2', 'gas_kr', 'gas_xe', 'gas_cd4', 'gas_other']
         for key in impuritykeys: 
