@@ -10,7 +10,7 @@ class VAE_1D(ModelInterface, jit.ScriptModule):
     model_interface = M.vae
     data_interface = D.dynamic
     def __init__(self, state_size: int, observation_dimensionality, encoder_args: dict, decoder_args: dict, return_type: str,min_std_dev: float = 0.01,*args, **kwargs) -> None:
-        self.data_interface = D.dynamic if return_type == 'pulse' else D.slice
+        # self.data_interface = D.dynamic if return_type == 'pulse' else D.slice
         super(VAE_1D, self).__init__()
         self.min_std_dev = min_std_dev
         self.state_size = state_size

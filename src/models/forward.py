@@ -15,20 +15,28 @@ class LinearForwardModel(ModelInterface, jit.ScriptModule):
         self.action_size = action_dimensionality
         self.min_std_dev = min_std_dev
         self.pushforward = pushforward_trick
+        self.hidden_layers = hidden_layers
         if isinstance(hidden_layers, int):
             self.forward_block = nn.Linear(self.state_size+self.action_size, hidden_layers)
             out_dim = hidden_layers
         elif isinstance(hidden_layers, list): 
-            forward_block = torch.nn.ModuleList()
+            self.forward_block = torch.nn.ModuleList()
             in_dim = self.action_size+self.state_size
             for out_dim in hidden_layers: 
-                forward_block.append(nn.Linear(in_dim, out_dim))
-                forward_block.append(nn.Tanh())
+                self.forward_block.append(nn.Linear(in_dim, out_dim))
+                self.forward_block.append(nn.SELU())
                 in_dim = out_dim 
+        print('HIDDEN LAYERS FORWARD MODEL', type(hidden_layers), hidden_layers)
+        print('FORWARD BLOCK', type(self.forward_block), self.forward_block)
         self.fc_state_transition = nn.Linear(out_dim, 2*self.state_size)
     
     def forward_single(self, state_action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: 
-        hidden = self.forward_block(state_action)
+        if isinstance(self.hidden_layers, list): 
+            hidden = state_action
+            for lay in self.forward_block: 
+                hidden = lay(hidden)
+        else: 
+            hidden = self.forward_block(state_action)
         loc, scale = torch.chunk(self.fc_state_transition(hidden), 2, dim=-1)
         scale = F.softplus(scale) + self.min_std_dev
         state = loc + scale * torch.rand_like(loc)

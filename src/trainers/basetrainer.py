@@ -36,7 +36,7 @@ class TrainInterface(metaclass=ABCMeta):
         self.model = model
         self.data = data 
         self.use_mlflow = use_mlflow
-        self.experiment_name = os.path.abspath(os.path.join('./saved_models', experiment_name))
+        self.experiment_name = os.path.abspath(os.path.join('./saved_models', experiment_name)) if not self.use_mlflow else experiment_name
         self.optimizer = optimizer
         self.criterion = criterion
         self.lr_scheduler = lr_scheduler
@@ -52,7 +52,7 @@ class TrainInterface(metaclass=ABCMeta):
         self.config_file = kwargs.get('config_file', '')
         self.create_figure_dir()
         self.config=config
-        self.log_artifacts()
+        # self.log_artifacts()
     def __repr__(self):
         return self.__class__.__name__
 
@@ -243,10 +243,6 @@ class TrainInterface(metaclass=ABCMeta):
                 for k, v in batch_loss_dict.items(): 
                     val = test_kwargs.get(k, 0.0)
                     test_kwargs[k] = val + v*batch_size
-                    # if k in test_kwargs: 
-                    #     test_kwargs[k] += v*batch_size 
-                    # else: 
-                    #     test_kwargs[k] = v*batch_size 
                 if batch_idx >= self.max_test_batches - 1:
                     break
         loss = loss / n_total 

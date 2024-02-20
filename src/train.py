@@ -10,6 +10,7 @@ config_filename = os.path.join('./configs', f'{args.config_file}.json')
 config_dict = parsing.get_config_file(config_filename)
 d = {**vars(args), **config_dict}
 args = argparse.Namespace(**d)
+experiment_name = args.experiment_name
 
 import data 
 import models 
@@ -39,6 +40,8 @@ if args.use_mlflow:
 data_interface = data.DatasetInterface(args.data.pop('return_type'), **args.data)# getattr(data, args.data.pop('object'))(data_path=args.data_path, **args.data)
 
 args = parsing.set_model_config_based_on_dataset(args, data_interface)
+
+print(args.model)
 model_interface = getattr(models, args.model.pop('object'))(**args.model)
 
 param_list = model_interface.parameters()
@@ -48,12 +51,15 @@ print(f"Training on {args.trainer['device']}")
 trainer = getattr(trainers, args.trainer.pop('object'))(**args.trainer, model=model_interface, data=data_interface, criterion=None, config={**args.trainer, **args.model, **args.data}, optimizer=optimizer, use_mlflow=args.use_mlflow, config_file=args.config_file, experiment_name=args.experiment_name)
 
 if args.use_mlflow: 
-    mlflow.set_experiment(args.experiment_name)
+    mlflow.set_experiment(experiment_name)
     with mlflow.start_run() as run: 
+        tmp_fname = f'./tmp/discharge_dict_{run.info.run_id}.pickle'
+        data_interface.log_training_discharges(fname=tmp_fname)
+        mlflow.log_artifact(tmp_fname, 'configs')
         mlflow.log_artifact(f'./configs/{args.config_file}.json', 'configs')
-        mlflow.log_artifact(os.path.join(args.data_path, args.data['transform_file']), 'configs')
-        mlflow.log_artifact(os.path.join(args.data_path, 'DATA_CONFIG.yaml'), 'configs')
-        for key, value in {**args.trainer, **args.model, **args.data, **{'data_path': args.data_path}}.items():
+        mlflow.log_artifact(os.path.join(args.data['data_path'], args.data['transform_file']), 'configs')
+        mlflow.log_artifact(os.path.join(args.data['data_path'], 'DATA_CONFIG.yaml'), 'configs')
+        for key, value in {**args.trainer, **args.model, **args.data, **{'data_path': args.data['data_path']}}.items():
             if key in ['scale_observation_decoder', 'scale_cond_reg', 'observational_model', 'transitional_model']:
                 pass
             else:

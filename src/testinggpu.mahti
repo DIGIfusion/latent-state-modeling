@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=FAFO
+#SBATCH --job-name=STABILITY_BUILD_ARRAYS
 #SBATCH --account=project_2005083
-#SBATCH --time=4:00:00
-#SBATCH --partition=gpusmall
+#SBATCH --time=0:15:00
+#SBATCH --partition=gputest
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=40
 #SBATCH --gres=gpu:a100:1
-#SBATCH --out=./slurm_out/training.out
+#SBATCH --out=./slurm_out/testing.out
 
 module purge 
 module load pytorch
@@ -22,5 +22,4 @@ export $(cat .env | xargs)
 export PYTHONPATH=$WRKDIR
 
 ARRAY_FOLDER=$WRKDIR/local_data_test3
-# -af=$ARRAY_FOLDER
 srun python3 train.py -cf=SRL_1
