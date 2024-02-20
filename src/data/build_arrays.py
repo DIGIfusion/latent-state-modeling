@@ -87,11 +87,11 @@ def map_pulse_dict_to_numpy_arrays(pulse_dict: datautils.PULSE_DICT, relevant_mp
 
 def post_process_machine_parameters(mps: np.ndarray, config: dict) -> np.ndarray: 
     """ 
-    1. D_tot and N_tot are measured in e/s, 
+    1. D_tot are measured in e/s, 
         therefore the order of magnitude is ~1e22, 
         so we scale it down, and clip anything that is too low to be registered
     """
-    for key in ['D_tot', 'N_tot']: 
+    for key in ['D_tot']: 
         mp_idx = config['all_mps_cols'].index(key)
         mps[:, mp_idx] *= 1e-22
         mps[:, mp_idx] = np.where(mps[:, mp_idx] < 1e-5, 0.0, mps[:, mp_idx])
@@ -109,6 +109,10 @@ def anomaly_detection_profiles(profiles: np.ndarray, config: dict, shotno: str) 
     # ! of the average change of the averaged profile over whole pulse
     # ! and the change in profile average is > 0.5 (normalized to keV and 1e-19)
     # ! discard the pulse 
+    if (ne > 40).sum() > 0: 
+        raise datautils.ProfileAnomaly(reason=f'Density greater than 4e20... dropping', shotno=shotno)
+    if (te > 20).sum() > 0: 
+        raise datautils.ProfileAnomaly(reason=f'Temperature greater than 20keV... dropping', shotno=shotno)
     ne_bool = np.logical_and(np.gradient(ne.mean(axis=1)) > np.gradient(ne.mean(axis=1)).mean() + 3*np.gradient(ne.mean(axis=1)).std(), np.gradient(ne.mean(axis=1)) > 0.5)
     # TODO: check against the gas injection! 
     if ne_bool.sum() > 30: 
@@ -152,6 +156,11 @@ def anomaly_detection_machine_parameters(mps: np.ndarray, config: dict, shotno: 
             logging.warning(f'{shotno} has {key} lower than {min_val} and higher than {max_val}')
             mps[:, mp_idx] = np.clip(mps[:, mp_idx], a_min=min_val, a_max=max_val)
             retriggering = True
+    
+    for key in ['PNBI_TOT', 'PECR_TOT', 'PICR_TOT']:
+        mp_idx = config['all_mps_cols'].index(key)
+        if mps[:, mp_idx].min() < 0.0:  
+            raise MPAnomaly(reason=f'Negative values of {key}', shotno=shotno)
     # if key in ['IpiFP']: 
     #     relevant_mp_vals = abs(relevant_mp_vals)
 
@@ -183,7 +192,7 @@ def build(shot_num: str):
 
             for n_idx, feature in enumerate(args.config['additional_feature_engineering'], start=len(relevant_mp_columns)):
                 profiles, mps, radii, times = datautils.map_additional_feature(feature, n_idx, relevant_mp_columns, profiles, mps, radii, times, precomputed_features)
-
+    # TODO: change below to high level aerrors, anomoly, not desired ,missing data, 
     except datautils.NotDesiredShot as e: 
         logging.info(e.message)
         # logging.info(f'Shot #{e.shotno} not desired because {e.reason}')
@@ -197,14 +206,13 @@ def build(shot_num: str):
         logging.warning(e.message)
     except RuntimeWarning as e: 
         logging.error(f'Shot #{shot_num} has unexpected error: {e}')
+    except datautils.MPAnomaly as e: 
+        logging.warning(e.message)
     else: 
         save_arrays(SAVE_DIR, profiles, mps, radii, times, shot_num)
         logging.info(f'Saved shot #{shot_num}')
 
-import yaml 
-def read_yaml_input_file(fname: str) -> dict: 
-    with open(fname, 'r') as f: 
-        return yaml.safe_load(f)
+
 
 def log_config_parameters(config, parent_key=''):
     for key, value in config.items():
@@ -225,7 +233,7 @@ if __name__ == '__main__':
     log_name = args.config.split('/')[-1].split('.yaml')[0]
     logging.basicConfig(filename=f'build_logs_{log_name}.log', format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO, filemode='w')
 
-    config = read_yaml_input_file(fname=args.config)
+    config = datautils.read_yaml_input_file(fname=args.config)
 
     # log args and config 
     logging.info(f"Raw Data Folder Location: {args.raw_folder_name}")

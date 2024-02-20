@@ -1,0 +1,10 @@
+additional_feature_engineering: 
+    - P_TOT/P_LH
+    - P_TOT 
+    - aspect_ratio 
+    - inverse_aspect_ratio
+additional_mapping_functions: None
+feature_filtering: 
+    - non-disruptive
+    - only-hmode
+    - no-icrh

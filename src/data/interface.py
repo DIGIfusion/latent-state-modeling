@@ -5,10 +5,14 @@ from data._utils import load_csv
 
 import torch 
 import random 
+import pickle 
+from typing import List 
+
 class DatasetInterface(): 
     def __init__(self, return_type: str, **kwargs):
         self.dataset = PulseDataset(**kwargs) if return_type == 'pulse' else SliceDataset(**kwargs)
         train_idxs, val_idxs, test_idxs = self.get_train_valid_test_split_idxs(kwargs.get('split', 0.5))
+        self.train_shots, self.val_shots, self.test_shots = self.get_dset_shot_nums_from_idxs(train_idxs, val_idxs, test_idxs)
         print(f'Train/val/test size {len(train_idxs)}/{len(val_idxs)}/{len(test_idxs)}')
         self.train_dataset = torch.utils.data.Subset(self.dataset, train_idxs)
         self.valid_dataset = torch.utils.data.Subset(self.dataset, val_idxs)
@@ -27,7 +31,8 @@ class DatasetInterface():
             val_idxs = val_test_idxs[:int(len(val_test_idxs)*val_split)]
             test_idxs = val_test_idxs[int(len(val_test_idxs)*val_split):]
         elif isinstance(split, dict): 
-            train_idxs, val_idxs, test_idxs = self.split['train_idxs'], self.split['valid_idxs'], self.split['test_idxs']  
+            # train_idxs, val_idxs, test_idxs = self.split['train_idxs'], self.split['valid_idxs'], self.split['test_idxs']  
+            train_shots, val_shots, test_shots = self.split['train_shots'], self.split['test_shots'], self.split['test_shots']
         elif isinstance(split, str): 
             shot_numbers = self.dataset.shot_numbers
             if split == 'iter_baseline': 
@@ -55,6 +60,16 @@ class DatasetInterface():
             raise ValueError('Split variable not configured propoerly, should be float, str, or dict')
         return train_idxs, val_idxs, test_idxs
     
+    def log_training_discharges(self, fname: str): 
+        shot_dict = {'train_shots': self.train_shots, 'val_shots': self.val_shots, 'test_shots': self.test_shots}
+        with open(fname, 'wb') as file: 
+            pickle.dump(shot_dict, file)
+        
+
+    def get_dset_shot_nums_from_idxs(self, train_idxs: List[int], val_idxs: List[int], test_idxs: List[int]): 
+        shot_numbers = self.dataset.shot_numbers
+        train_shots, val_shots, test_shots = [[shot_numbers[q] for q in shot_idxs] for shot_idxs in [train_idxs, val_idxs, test_idxs]]
+        return train_shots, val_shots, test_shots
 
     @property 
     def train(self): 

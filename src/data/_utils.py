@@ -64,7 +64,7 @@ def check_no_ecrh(pulse_dict):
     return all(pulse_dict['journal'][key] == 0.0 for key in keys_other)
 
 def check_no_icrh(pulse_dict): 
-    """ Returns true if pulse does not have ECRH heating based on journal data""" 
+    """ Returns true if pulse does not have ICRH heating based on journal data""" 
     """
     'icrh1l': 292300.0,
     'icrh1f': 140000000000.0,
@@ -212,6 +212,11 @@ def get_local_pulse_arrays(shot_number: Union[int, str], folder_name: str) -> Tu
 
     return profiles, mps, time, radii
 
+import yaml 
+def read_yaml_input_file(fname: str) -> dict: 
+    with open(fname, 'r') as f: 
+        return yaml.safe_load(f)
+        
 # !-------------------------------------------------
 # ! Data Exceptions
 # !-------------------------------------------------
@@ -244,6 +249,13 @@ class ShortPulse(Exception):
         self.total_time = total_time
         self.message = f'{shotno} not saved because only {total_time}s after making array format'
         super().__init__(total_time, shotno)
+
+class MPAnomaly(Exception): 
+    def __init__(self, reason: str, shotno:str) -> None: 
+        self.shotno = shotno
+        self.reason = reason
+        self.message = f'Profile anomaly in {shotno}: {reason}'
+        super().__init__(reason, shotno)
 
 # !-------------------------------------------------
 # ! Unsorted possibly junk, I am a hoarder

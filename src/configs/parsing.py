@@ -25,8 +25,8 @@ def set_model_config_based_on_dataset(args: argparse.Namespace, data_interface):
     args.model['observation_dimensionality'] =(data_interface.dataset.observational_channels, data_interface.dataset.observational_spatial_dim)
     args.model['action_dimensionality'] = len(data_interface.dataset.filter_mps_names)
     args.model['return_type'] = data_interface.dataset.return_type
-    if args.model.get('observational_model'): 
-        args.model['observational_model']['return_type'] = data_interface.dataset.return_type
-        args.model['transitional_model']['return_type'] = data_interface.dataset.return_type
+    # if args.model.get('observational_model'): 
+    #     args.model['observational_model']['return_type'] = data_interface.dataset.return_type
+    #     args.model['transitional_model']['return_type'] = data_interface.dataset.return_type
 
     return args

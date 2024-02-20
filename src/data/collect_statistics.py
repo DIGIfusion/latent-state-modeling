@@ -6,9 +6,10 @@ parser = argparse.ArgumentParser(description='Process raw data into numpy arrays
 parser.add_argument('-rf', '--raw_folder_name', type=str, default=None)
 parser.add_argument('-af', '--array_folder_name', type=str, default='/home/kitadam/ENR_Sven/test_moxie/experiments/ICDDPS_AK/local_data/', help='Folder name under which to store the raw numpy arrays. This will be found in whatever your processed dir is.')
 args = parser.parse_args()
+
 SAVE_DIR = args.array_folder_name
 RAW_DIR = args.raw_folder_name
-saved_shot_nums = [fname.split('_')[0] for fname in os.listdir(SAVE_DIR) if 'PROFS' in fname]
+saved_shot_nums = [fname.split('_')[0] for fname in os.listdir(SAVE_DIR) if (('PROFS' in fname) and fname.endswith('npy'))]
 
 import pandas as pd 
 
