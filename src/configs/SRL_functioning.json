@@ -1,4 +1,4 @@
-{"use_mlflow": true, "experiment_name": "hype-search-p-s-given-a-s", "seed": 2,  
+{"use_mlflow": true, "experiment_name": "repurposed-jank", "seed": 2,  
     "data": {"object": "PulseDataset",
             "chunk_size": 10000, 
             "data_path": "/scratch/project_2005083/latent-state-modeling/local_data_test3",
@@ -10,7 +10,7 @@
             "sample_interval": 40},
     "model": {"object": "DualModelInterface",
                 "min_std_dev": 0.005, 
-                "state_size": 7,
+                "state_size": 12,
                 
             "observational_model":{
                                 "object": "VAE_1D",

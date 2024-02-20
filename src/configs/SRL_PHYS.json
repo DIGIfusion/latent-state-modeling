@@ -1,4 +1,4 @@
-{"use_mlflow": true, "experiment_name": "hype-search-p-s-given-a-s", "seed": 2,  
+{"use_mlflow": true, "experiment_name": "repurposed-jank", "seed": 1,  
     "data": {"object": "PulseDataset",
             "chunk_size": 10000, 
             "data_path": "/scratch/project_2005083/latent-state-modeling/local_data_test3",
@@ -9,8 +9,8 @@
             "clamp_observations_to_reals": true,
             "sample_interval": 40},
     "model": {"object": "DualModelInterface",
-                "min_std_dev": 0.005, 
-                "state_size": 7,
+                "min_std_dev": 0.01, 
+                "state_size": 13,
                 
             "observational_model":{
                                 "object": "VAE_1D",
@@ -30,9 +30,8 @@
                                 },
             "transitional_model": {
                                 "object": "LinearForwardModel", 
-                                "hidden_layers": [50, 35, 20], 
-                                "pushforward_trick": "last",
-                                "activation": "SELU"
+                                "hidden_layers": 20, 
+                                "pushforward_trick": "all"
                                 }
             }, 
     "trainer": {"object": "DualTrainInterface",
@@ -50,8 +49,8 @@
                 "rollout_increase_step_amount": 1,
                 "rollout_maximum": 10, 
                 "physics": {
-                        "pressure": false,
-                        "beta_pressure": 10.0, 
+                        "pressure": true,
+                        "beta_pressure": 1.0, 
                         "gradient": false,
                         "beta_gradient": 20.0
                         }, 

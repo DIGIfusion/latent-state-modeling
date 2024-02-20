@@ -1,16 +1,16 @@
-{"use_mlflow": true, "experiment_name": "hype-search-p-s-given-a-s", "seed": 2,  
+{"use_mlflow": true, "experiment_name": "imp-studies", "seed": 1,  
     "data": {"object": "PulseDataset",
             "chunk_size": 10000, 
-            "data_path": "/scratch/project_2005083/latent-state-modeling/local_data_test3",
+            "data_path": "/scratch/project_2005083/latent-state-modeling/local_data_imp",
             "transform_file": "transformations.pickle", 
-            "filter_mps": ["IpiFP", "D_tot", "k", "delRoben", "delRuntn", "ahor", "q95", "P_TOT", "PNBI_TOT","PECR_TOT", "aspect_ratio"], 
+            "filter_mps": ["IpiFP", "D_tot", "N_tot", "k", "delRoben", "delRuntn", "ahor", "q95", "P_TOT", "PNBI_TOT","PECR_TOT","aspect_ratio"], 
             "split": "program", 
             "return_type": "pulse", 
             "clamp_observations_to_reals": true,
             "sample_interval": 40},
     "model": {"object": "DualModelInterface",
                 "min_std_dev": 0.005, 
-                "state_size": 7,
+                "state_size": 8,
                 
             "observational_model":{
                                 "object": "VAE_1D",
@@ -30,9 +30,8 @@
                                 },
             "transitional_model": {
                                 "object": "LinearForwardModel", 
-                                "hidden_layers": [50, 35, 20], 
-                                "pushforward_trick": "last",
-                                "activation": "SELU"
+                                "hidden_layers": 20, 
+                                "pushforward_trick": "all"
                                 }
             }, 
     "trainer": {"object": "DualTrainInterface",
@@ -48,7 +47,7 @@
                 "rollout_start": 4,
                 "rollout_step_interval": 3,
                 "rollout_increase_step_amount": 1,
-                "rollout_maximum": 10, 
+                "rollout_maximum": 35, 
                 "physics": {
                         "pressure": false,
                         "beta_pressure": 10.0, 
@@ -56,8 +55,8 @@
                         "beta_gradient": 20.0
                         }, 
                 "loss_hyperparams": {
-                        "beta_kld_transition": 100.0,
-                        "beta_observations": 100.0,
+                        "beta_kld_transition": 10.0,
+                        "beta_observations": 1.0,
                         "beta_kld_posterior_normal": 0.01}
                 }
                 
