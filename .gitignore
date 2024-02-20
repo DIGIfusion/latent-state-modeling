@@ -1,8 +1,10 @@
 # data 
+notes/
 local_data*/
 saved_models/
 mlruns/
 slurm_out/
+tmp/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
